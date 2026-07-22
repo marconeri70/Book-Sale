@@ -1,38 +1,44 @@
-# BookSale
+# BookSale Cloudflare
 
-Prima versione funzionante della webapp per vendere, comprare e scambiare libri.
+Versione di BookSale collegata a Cloudflare:
 
-## Funzioni incluse
-- Home con categorie e ultimi annunci
-- Ricerca per titolo, autore, ISBN e località
-- Filtri per categoria, condizione e prezzo
-- Pubblicazione e modifica annunci
-- Recupero dati libro da ISBN tramite Open Library
-- Foto dalla fotocamera o galleria
-- Scanner barcode ISBN sui dispositivi compatibili
-- Preferiti
-- Gestione annunci e stato venduto
-- Profilo e contatti
-- Ricerca degli annunci entro 50 km
-- Backup e ripristino JSON
-- Installazione PWA e cache offline dell'interfaccia
+- **Cloudflare D1**: database condiviso degli annunci.
+- **Cloudflare R2**: archiviazione delle foto caricate dagli utenti.
+- **Cloudflare Worker**: API che collega la webapp a D1 e R2.
+- **Open Library**: compilazione dei dati tramite ISBN.
+- **localStorage**: profilo, preferiti e chiave privata del dispositivo.
 
-## Avvio in locale
-Il modo più semplice è usare un piccolo server HTTP:
+## Struttura della cartella
 
-```bash
-python -m http.server 8000
+```text
+BookSale-Cloudflare/
+├── index.html
+├── style.css
+├── app.js
+├── config.js
+├── manifest.webmanifest
+├── sw.js
+├── icon-192.png
+├── icon-512.png
+├── GUIDA-CLOUDFLARE.md
+└── cloudflare-worker/
+    ├── package.json
+    ├── wrangler.jsonc
+    ├── schema.sql
+    ├── seed.sql
+    └── src/index.js
 ```
 
-Poi aprire `http://localhost:8000`.
+## Prima configurazione
 
-## Pubblicazione su GitHub Pages
-1. Crea un repository, ad esempio `booksale`.
-2. Carica tutti i file presenti in questa cartella nella radice del repository.
-3. Apri **Settings → Pages**.
-4. In **Build and deployment**, scegli **Deploy from a branch**.
-5. Seleziona il branch `main` e la cartella `/root`.
-6. Salva e attendi la pubblicazione.
+Segui il file `GUIDA-CLOUDFLARE.md` nell'ordine indicato.
 
-## Nota importante
-Questa versione usa `localStorage`: annunci e profilo rimangono soltanto sul dispositivo. Per rendere gli annunci visibili a tutti gli utenti servirà collegare un database cloud e un sistema di autenticazione.
+## Sicurezza della proprietà degli annunci
+
+BookSale crea sul dispositivo una chiave privata casuale. Il Worker salva soltanto la sua impronta SHA-256. Solo chi possiede la chiave può modificare, segnare come venduto o eliminare gli annunci associati.
+
+Il backup JSON contiene anche la chiave privata. Conservalo in un luogo sicuro: importandolo su un altro telefono potrai continuare a gestire i tuoi annunci.
+
+## Modalità senza cloud
+
+Finché `config.js` contiene l'indirizzo segnaposto, l'app continua a funzionare in modalità dimostrativa locale. Dopo aver inserito l'URL reale del Worker, passa automaticamente alla modalità condivisa.

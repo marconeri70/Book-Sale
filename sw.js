@@ -1,9 +1,10 @@
-const CACHE_NAME = "booksale-static-v1";
+const CACHE_NAME = "booksale-static-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
+  "./config.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png"

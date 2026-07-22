@@ -23,6 +23,10 @@
       </button>
 
       <div class="top-actions">
+        <span id="cloudStatus" class="cloud-status offline" title="Stato sincronizzazione Cloudflare">
+          <i aria-hidden="true"></i><span>Cloud da configurare</span>
+        </span>
+        <button id="refreshCloudBtn" class="icon-btn" type="button" aria-label="Aggiorna annunci dal cloud" title="Aggiorna annunci">↻</button>
         <button id="installBtn" class="icon-btn install-btn hidden" type="button" aria-label="Installa BookSale" title="Installa app">
           <span aria-hidden="true">↓</span>
         </button>
@@ -183,7 +187,7 @@
 
         <div class="data-tools">
           <h2>Dati dell’app</h2>
-          <p>Esporta un backup degli annunci e del profilo oppure ripristinalo su un altro dispositivo.</p>
+          <p>Esporta profilo, preferiti e chiave privata degli annunci. Conserva il backup: serve per gestire i tuoi annunci da un altro dispositivo.</p>
           <div class="tool-actions">
             <button id="exportBtn" class="secondary-btn" type="button">Esporta backup</button>
             <label class="secondary-btn file-btn">
@@ -389,6 +393,7 @@
     </div>
   </template>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

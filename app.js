@@ -2,9 +2,10 @@
   "use strict";
 
   const STORAGE = {
-    listings: "booksale_listings_v1",
+    listings: "booksale_listings_v2",
     favorites: "booksale_favorites_v1",
-    profile: "booksale_profile_v1"
+    profile: "booksale_profile_v1",
+    ownerToken: "booksale_owner_token_v1"
   };
 
   const categories = [
@@ -74,14 +75,21 @@
     lng: null
   };
 
-  let listings = load(STORAGE.listings, demoListings);
+  const API_BASE_URL = String(window.BOOKSALE_CONFIG?.API_BASE_URL || "").replace(/\/+$/, "");
+  const CLOUD_ENABLED = Boolean(API_BASE_URL) && !/INSERISCI|YOUR-|ESEMPIO/i.test(API_BASE_URL);
+
+  let listings = load(STORAGE.listings, CLOUD_ENABLED ? [] : demoListings);
   let favorites = load(STORAGE.favorites, []);
   let profile = load(STORAGE.profile, defaultProfile);
+  let ownerToken = getOrCreateOwnerToken();
   let deferredInstallPrompt = null;
   let scannerStream = null;
   let scanTimer = null;
-  let uploadedCoverData = "";
+  let uploadedCoverBlob = null;
+  let uploadedCoverPreviewUrl = "";
+  let coverRemoved = false;
   let nearMeEnabled = false;
+  let syncInProgress = false;
 
   const $ = (selector, parent = document) => parent.querySelector(selector);
   const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
@@ -97,6 +105,78 @@
 
   function structuredCloneSafe(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function getOrCreateOwnerToken() {
+    const saved = localStorage.getItem(STORAGE.ownerToken);
+    if (saved && saved.length >= 32) return saved;
+    const token = crypto.randomUUID
+      ? `${crypto.randomUUID()}-${crypto.randomUUID()}`
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(STORAGE.ownerToken, token);
+    return token;
+  }
+
+  function setCloudStatus(state, text) {
+    const status = $("#cloudStatus");
+    if (!status) return;
+    status.className = `cloud-status ${state}`;
+    const label = status.querySelector("span:last-child");
+    if (label) label.textContent = text;
+  }
+
+  async function apiFetch(path, options = {}) {
+    if (!CLOUD_ENABLED) throw new Error("Cloudflare non configurato");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 18000);
+    const headers = new Headers(options.headers || {});
+    headers.set("X-Owner-Token", ownerToken);
+    if (options.body && !(options.body instanceof Blob) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
+      const type = response.headers.get("Content-Type") || "";
+      const data = type.includes("application/json") ? await response.json() : null;
+      if (!response.ok) throw new Error(data?.error || `Errore ${response.status}`);
+      return data;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("Il server non risponde");
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function loadRemoteListings(showMessage = false) {
+    if (!CLOUD_ENABLED || syncInProgress) return;
+    syncInProgress = true;
+    setCloudStatus("connecting", "Sincronizzazione…");
+    try {
+      const data = await apiFetch("/api/listings");
+      listings = Array.isArray(data?.listings) ? data.listings : [];
+      saveAll();
+      renderAll();
+      setCloudStatus("online", "Cloud online");
+      if (showMessage) showToast("Annunci aggiornati dal cloud");
+    } catch (error) {
+      setCloudStatus("offline", "Cloud non raggiungibile");
+      if (!listings.length) listings = structuredCloneSafe(demoListings);
+      renderAll();
+      if (showMessage) showToast(error.message || "Sincronizzazione non riuscita");
+    } finally {
+      syncInProgress = false;
+    }
+  }
+
+  async function uploadImage(blob) {
+    const data = await apiFetch("/api/images", {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "image/jpeg" },
+      body: blob
+    });
+    return { url: data.url, key: data.key };
   }
 
   function saveAll() {
@@ -367,11 +447,9 @@
     $("#detailsDialog").showModal();
   }
 
-  function handleContact(id, kind) {
+  async function handleContact(id, kind) {
     const item = listings.find(listing => listing.id === id);
     if (!item) return;
-    const sellerEmail = item.owner ? profile.email : item.sellerEmail;
-    const sellerPhone = item.owner ? profile.phone : item.sellerPhone;
     const text = `Ciao, sono interessato al libro "${item.title}" pubblicato su BookSale.`;
 
     if (kind === "share") {
@@ -382,6 +460,20 @@
         showToast("Dati dell’annuncio copiati");
       }
       return;
+    }
+
+    let sellerEmail = item.owner ? profile.email : item.sellerEmail;
+    let sellerPhone = item.owner ? profile.phone : item.sellerPhone;
+
+    if (CLOUD_ENABLED && !item.owner) {
+      try {
+        const data = await apiFetch(`/api/listings/${encodeURIComponent(id)}/contact`);
+        sellerEmail = data.contact?.email || "";
+        sellerPhone = data.contact?.phone || "";
+      } catch (error) {
+        showToast(error.message || "Contatto non disponibile");
+        return;
+      }
     }
 
     if (sellerPhone) {
@@ -404,7 +496,10 @@
     $("#priceInput").value = "5";
     $("#locationInput").value = profile.location || "";
     $("#isbnMessage").textContent = "L’ISBN si trova vicino al codice a barre sul retro del libro.";
-    uploadedCoverData = "";
+    uploadedCoverBlob = null;
+    if (uploadedCoverPreviewUrl) URL.revokeObjectURL(uploadedCoverPreviewUrl);
+    uploadedCoverPreviewUrl = "";
+    coverRemoved = false;
     updateCoverPreview("");
   }
 
@@ -425,9 +520,10 @@
       $("#descriptionInput").value = item.description || "";
       $("#locationInput").value = item.location;
       $("#deliveryInput").value = item.delivery;
-      $("#coverUrlInput").value = item.cover?.startsWith("data:") ? "" : (item.cover || "");
+      $("#coverUrlInput").value = item.cover || "";
       $("#exchangeInput").checked = Boolean(item.exchange);
-      uploadedCoverData = item.cover?.startsWith("data:") ? item.cover : "";
+      uploadedCoverBlob = null;
+      coverRemoved = false;
       updateCoverPreview(item.cover);
     }
     $("#sellDialog").showModal();
@@ -471,7 +567,8 @@
       $("#categoryInput").innerHTML = categoryOptions(guessed);
       const cover = book.cover?.large || book.cover?.medium || `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
       $("#coverUrlInput").value = cover;
-      uploadedCoverData = "";
+      uploadedCoverBlob = null;
+      coverRemoved = false;
       updateCoverPreview(cover);
       $("#isbnMessage").textContent = "Dati trovati. Controllali prima di pubblicare.";
     } catch (error) {
@@ -513,79 +610,135 @@
       img.src = dataUrl;
     });
 
-    const maxSide = 1000;
+    const maxSide = 1200;
     const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(image.width * scale);
     canvas.height = Math.round(image.height * scale);
     canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", .82);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Conversione non riuscita")), "image/jpeg", .84);
+    });
   }
 
-  function submitListing(event) {
+  async function submitListing(event) {
     event.preventDefault();
-    const id = $("#listingId").value;
-    const type = $("#listingTypeInput").value;
-    const price = type === "Vendita" ? Math.max(0, Number($("#priceInput").value || 0)) : 0;
-    const existing = listings.find(item => item.id === id);
-    const cover = uploadedCoverData || $("#coverUrlInput").value.trim();
+    const submitButton = event.submitter || $("#listingForm .primary-btn[type=submit]");
+    const originalLabel = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = CLOUD_ENABLED ? "Pubblicazione…" : "Salvataggio…";
 
-    const listing = {
-      id: id || `book-${Date.now()}`,
-      owner: true,
-      title: $("#titleInput").value.trim(),
-      author: $("#authorInput").value.trim(),
-      isbn: normalizeIsbn($("#isbnInput").value),
-      category: $("#categoryInput").value,
-      condition: $("#conditionInput").value,
-      type,
-      price,
-      description: $("#descriptionInput").value.trim(),
-      location: $("#locationInput").value.trim(),
-      delivery: $("#deliveryInput").value,
-      cover,
-      seller: profile.name,
-      sellerEmail: profile.email,
-      sellerPhone: profile.phone,
-      exchange: $("#exchangeInput").checked,
-      createdAt: existing?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      status: existing?.status || "available",
-      lat: profile.lat,
-      lng: profile.lng
-    };
+    try {
+      const id = $("#listingId").value;
+      const type = $("#listingTypeInput").value;
+      const price = type === "Vendita" ? Math.max(0, Number($("#priceInput").value || 0)) : 0;
+      const existing = listings.find(item => item.id === id);
+      let cover = coverRemoved ? "" : ($("#coverUrlInput").value.trim() || existing?.cover || "");
+      let imageKey = coverRemoved ? "" : (existing?.imageKey || "");
 
-    if (id) {
-      listings = listings.map(item => item.id === id ? listing : item);
-    } else {
-      listings.unshift(listing);
+      if (CLOUD_ENABLED && uploadedCoverBlob) {
+        submitButton.textContent = "Caricamento foto…";
+        const uploaded = await uploadImage(uploadedCoverBlob);
+        cover = uploaded.url;
+        imageKey = uploaded.key;
+      } else if (!CLOUD_ENABLED && uploadedCoverBlob) {
+        cover = await blobToDataUrl(uploadedCoverBlob);
+      }
+
+      const listing = {
+        id: id || `book-${Date.now()}`,
+        owner: true,
+        title: $("#titleInput").value.trim(),
+        author: $("#authorInput").value.trim(),
+        isbn: normalizeIsbn($("#isbnInput").value),
+        category: $("#categoryInput").value,
+        condition: $("#conditionInput").value,
+        type, price,
+        description: $("#descriptionInput").value.trim(),
+        location: $("#locationInput").value.trim(),
+        delivery: $("#deliveryInput").value,
+        cover, imageKey,
+        seller: profile.name,
+        sellerEmail: profile.email,
+        sellerPhone: profile.phone,
+        exchange: $("#exchangeInput").checked,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: existing?.status || "available",
+        lat: profile.lat, lng: profile.lng
+      };
+
+      if (CLOUD_ENABLED) {
+        submitButton.textContent = id ? "Aggiornamento…" : "Pubblicazione…";
+        await apiFetch(id ? `/api/listings/${encodeURIComponent(id)}` : "/api/listings", {
+          method: id ? "PUT" : "POST",
+          body: JSON.stringify(listing)
+        });
+        await loadRemoteListings(false);
+      } else {
+        listings = id ? listings.map(item => item.id === id ? listing : item) : [listing, ...listings];
+        saveAll();
+        renderAll();
+      }
+
+      $("#sellDialog").close();
+      showView("profile");
+      showToast(id ? "Annuncio aggiornato" : "Annuncio pubblicato");
+    } catch (error) {
+      showToast(error.message || "Impossibile salvare l’annuncio");
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = originalLabel;
     }
-    saveAll();
-    $("#sellDialog").close();
-    renderAll();
-    showView("profile");
-    showToast(id ? "Annuncio aggiornato" : "Annuncio pubblicato");
   }
 
-  function deleteListing(id) {
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function deleteListing(id) {
+    const item = listings.find(listing => listing.id === id && listing.owner);
+    if (!item || !confirm(`Eliminare l’annuncio “${item.title}”?`)) return;
+    try {
+      if (CLOUD_ENABLED) {
+        await apiFetch(`/api/listings/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await loadRemoteListings(false);
+      } else {
+        listings = listings.filter(listing => listing.id !== id);
+        favorites = favorites.filter(favoriteId => favoriteId !== id);
+        saveAll();
+        renderAll();
+      }
+      showToast("Annuncio eliminato");
+    } catch (error) {
+      showToast(error.message || "Eliminazione non riuscita");
+    }
+  }
+
+  async function toggleSold(id) {
     const item = listings.find(listing => listing.id === id && listing.owner);
     if (!item) return;
-    if (!confirm(`Eliminare l’annuncio “${item.title}”?`)) return;
-    listings = listings.filter(listing => listing.id !== id);
-    favorites = favorites.filter(favoriteId => favoriteId !== id);
-    saveAll();
-    renderAll();
-    showToast("Annuncio eliminato");
-  }
-
-  function toggleSold(id) {
-    listings = listings.map(item => item.id === id && item.owner
-      ? { ...item, status: item.status === "sold" ? "available" : "sold", updatedAt: new Date().toISOString() }
-      : item
-    );
-    saveAll();
-    renderAll();
-    showToast("Stato dell’annuncio aggiornato");
+    const status = item.status === "sold" ? "available" : "sold";
+    try {
+      if (CLOUD_ENABLED) {
+        await apiFetch(`/api/listings/${encodeURIComponent(id)}/status`, {
+          method: "PATCH", body: JSON.stringify({ status })
+        });
+        await loadRemoteListings(false);
+      } else {
+        listings = listings.map(current => current.id === id ? { ...current, status, updatedAt: new Date().toISOString() } : current);
+        saveAll();
+        renderAll();
+      }
+      showToast("Stato dell’annuncio aggiornato");
+    } catch (error) {
+      showToast(error.message || "Aggiornamento non riuscito");
+    }
   }
 
   function openProfileEditor() {
@@ -597,25 +750,38 @@
     $("#profileDialog").showModal();
   }
 
-  function submitProfile(event) {
+  async function submitProfile(event) {
     event.preventDefault();
-    profile = {
+    const nextProfile = {
       ...profile,
       name: $("#profileNameInput").value.trim(),
       location: $("#profileLocationInput").value.trim(),
       email: $("#profileEmailInput").value.trim(),
       phone: $("#profilePhoneInput").value.trim()
     };
-    listings = listings.map(item => item.owner ? {
-      ...item,
-      seller: profile.name,
-      sellerEmail: profile.email,
-      sellerPhone: profile.phone
-    } : item);
-    saveAll();
-    $("#profileDialog").close();
-    renderAll();
-    showToast("Profilo aggiornato");
+
+    try {
+      profile = nextProfile;
+      if (CLOUD_ENABLED) {
+        await apiFetch("/api/my-listings/profile", {
+          method: "PATCH",
+          body: JSON.stringify({ seller: profile.name, sellerEmail: profile.email, sellerPhone: profile.phone })
+        });
+        await loadRemoteListings(false);
+      } else {
+        listings = listings.map(item => item.owner ? {
+          ...item, seller: profile.name, sellerEmail: profile.email, sellerPhone: profile.phone
+        } : item);
+      }
+      saveAll();
+      $("#profileDialog").close();
+      renderAll();
+      showToast("Profilo aggiornato");
+    } catch (error) {
+      saveAll();
+      renderAll();
+      showToast(`Profilo salvato localmente: ${error.message}`);
+    }
   }
 
   function getCurrentLocation(forNearMe = false) {
@@ -701,7 +867,8 @@
       exportedAt: new Date().toISOString(),
       profile,
       listings,
-      favorites
+      favorites,
+      ownerToken
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -715,28 +882,35 @@
   async function importBackup(file) {
     try {
       const payload = JSON.parse(await file.text());
-      if (payload.app !== "BookSale" || !Array.isArray(payload.listings) || !Array.isArray(payload.favorites)) {
-        throw new Error("Formato non valido");
-      }
-      listings = payload.listings;
+      if (payload.app !== "BookSale" || !Array.isArray(payload.favorites)) throw new Error("Formato non valido");
       favorites = payload.favorites;
       profile = { ...defaultProfile, ...(payload.profile || {}) };
+      if (payload.ownerToken && String(payload.ownerToken).length >= 32) {
+        ownerToken = String(payload.ownerToken);
+        localStorage.setItem(STORAGE.ownerToken, ownerToken);
+      }
+      if (!CLOUD_ENABLED && Array.isArray(payload.listings)) listings = payload.listings;
       saveAll();
+      if (CLOUD_ENABLED) await loadRemoteListings(false);
       renderAll();
-      showToast("Backup importato");
+      showToast("Backup importato. Chiave proprietario ripristinata.");
     } catch {
       showToast("File di backup non valido");
     }
   }
 
-  function resetDemo() {
-    if (!confirm("Ripristinare i dati dimostrativi? Gli annunci creati su questo dispositivo saranno cancellati.")) return;
-    listings = structuredCloneSafe(demoListings);
+  async function resetDemo() {
+    const message = CLOUD_ENABLED
+      ? "Azzera preferiti e profilo locale? Gli annunci nel cloud e la chiave proprietario non saranno cancellati."
+      : "Ripristinare i dati dimostrativi? Gli annunci locali saranno cancellati.";
+    if (!confirm(message)) return;
     favorites = [];
     profile = structuredCloneSafe(defaultProfile);
+    if (!CLOUD_ENABLED) listings = structuredCloneSafe(demoListings);
     saveAll();
+    if (CLOUD_ENABLED) await loadRemoteListings(false);
     renderAll();
-    showToast("Dati dimostrativi ripristinati");
+    showToast(CLOUD_ENABLED ? "Dati locali azzerati" : "Dati dimostrativi ripristinati");
   }
 
   function registerEvents() {
@@ -826,21 +1000,30 @@
     $("#closeScannerBtn").addEventListener("click", stopScanner);
 
     $("#coverUrlInput").addEventListener("input", event => {
-      if (!uploadedCoverData) updateCoverPreview(event.target.value.trim());
+      if (!uploadedCoverBlob) {
+        coverRemoved = !event.target.value.trim();
+        updateCoverPreview(event.target.value.trim());
+      }
     });
     $("#coverFileInput").addEventListener("change", async event => {
       const file = event.target.files?.[0];
       if (!file) return;
       try {
-        uploadedCoverData = await resizeImage(file);
+        uploadedCoverBlob = await resizeImage(file);
+        coverRemoved = false;
+        if (uploadedCoverPreviewUrl) URL.revokeObjectURL(uploadedCoverPreviewUrl);
+        uploadedCoverPreviewUrl = URL.createObjectURL(uploadedCoverBlob);
         $("#coverUrlInput").value = "";
-        updateCoverPreview(uploadedCoverData);
+        updateCoverPreview(uploadedCoverPreviewUrl);
       } catch {
         showToast("Impossibile leggere la foto");
       }
     });
     $("#removeCoverBtn").addEventListener("click", () => {
-      uploadedCoverData = "";
+      uploadedCoverBlob = null;
+      coverRemoved = true;
+      if (uploadedCoverPreviewUrl) URL.revokeObjectURL(uploadedCoverPreviewUrl);
+      uploadedCoverPreviewUrl = "";
       $("#coverUrlInput").value = "";
       $("#coverFileInput").value = "";
       updateCoverPreview("");
@@ -860,6 +1043,7 @@
       event.target.value = "";
     });
     $("#resetAppBtn").addEventListener("click", resetDemo);
+    $("#refreshCloudBtn")?.addEventListener("click", () => loadRemoteListings(true));
 
     ["sellDialog", "detailsDialog", "profileDialog"].forEach(id => {
       const dialog = $(`#${id}`);
@@ -890,11 +1074,19 @@
     });
   }
 
-  function init() {
+  async function init() {
     $("#categoryInput").innerHTML = categoryOptions("Narrativa");
     $("#categoryFilter").insertAdjacentHTML("beforeend", categoryOptions());
     registerEvents();
     renderAll();
+
+    if (CLOUD_ENABLED) {
+      $("#resetAppBtn").textContent = "Azzera dati locali";
+      setCloudStatus("connecting", "Connessione…");
+      await loadRemoteListings(false);
+    } else {
+      setCloudStatus("offline", "Cloud da configurare");
+    }
 
     if ("serviceWorker" in navigator && location.protocol !== "file:") {
       window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));

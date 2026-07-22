@@ -90,6 +90,33 @@ img { max-width: 100%; }
 .brand small { display: block; color: var(--muted); font-size: .72rem; }
 
 .top-actions { display: flex; align-items: center; gap: 10px; }
+.cloud-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 11px;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 800;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.cloud-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #98a2a0;
+}
+.cloud-status.online { color: #087443; border-color: #a8dfc4; background: #effbf5; }
+.cloud-status.online i { background: #12a663; box-shadow: 0 0 0 4px rgba(18,166,99,.12); }
+.cloud-status.connecting { color: #8a5a00; border-color: #ead39b; background: #fff9e8; }
+.cloud-status.connecting i { background: #e5a000; animation: cloud-pulse 1s infinite alternate; }
+.cloud-status.offline { color: #8b3a32; border-color: #ecc1bc; background: #fff5f4; }
+.cloud-status.offline i { background: #d04a3a; }
+@keyframes cloud-pulse { to { opacity: .35; transform: scale(.75); } }
+
 
 .icon-btn, .avatar-btn {
   display: grid;
@@ -752,6 +779,8 @@ main { padding: 0 clamp(16px, 4vw, 56px); }
   .details-layout { grid-template-columns: .8fr 1.2fr; }
 }
 @media (max-width: 700px) {
+  .cloud-status span:last-child { display: none; }
+  .cloud-status { width: 38px; padding: 0; justify-content: center; }
   .topbar { min-height: 66px; }
   .brand small { display: none; }
   .hero { margin-top: 10px; padding: 28px 20px 24px; }
