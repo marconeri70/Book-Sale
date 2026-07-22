@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="BookSale: compra, vendi e scambia libri vicino a te.">
+  <title>BookSale</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="brand" data-view="home" aria-label="Vai alla home">
+        <span class="brand-mark" aria-hidden="true">B</span>
+        <span>
+          <strong>BookSale</strong>
+          <small>Dai una seconda vita ai libri</small>
+        </span>
+      </button>
+
+      <div class="top-actions">
+        <button id="installBtn" class="icon-btn install-btn hidden" type="button" aria-label="Installa BookSale" title="Installa app">
+          <span aria-hidden="true">↓</span>
+        </button>
+        <button class="avatar-btn" data-view="profile" type="button" aria-label="Apri il profilo">
+          <span id="headerAvatar">MN</span>
+        </button>
+      </div>
+    </header>
+
+    <main id="mainContent" tabindex="-1">
+      <section id="homeView" class="view active">
+        <div class="hero">
+          <div class="hero-copy">
+            <span class="eyebrow">Il mercatino dei lettori</span>
+            <h1>Il libro che cerchi potrebbe essere già vicino a te.</h1>
+            <p>Compra, vendi o scambia libri usati in modo semplice.</p>
+          </div>
+
+          <form id="heroSearchForm" class="search-box" role="search">
+            <span aria-hidden="true">⌕</span>
+            <input id="heroSearchInput" type="search" placeholder="Titolo, autore o ISBN" autocomplete="off" aria-label="Cerca libri">
+            <button type="submit">Cerca</button>
+          </form>
+
+          <div class="hero-stats" aria-label="Statistiche BookSale">
+            <div><strong id="statBooks">0</strong><span>libri</span></div>
+            <div><strong id="statCities">0</strong><span>località</span></div>
+            <div><strong id="statSavings">0 €</strong><span>risparmio stimato</span></div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Esplora</span>
+              <h2>Categorie</h2>
+            </div>
+            <button class="text-btn" data-view="explore" type="button">Vedi tutte</button>
+          </div>
+          <div id="categoryRail" class="category-rail"></div>
+        </div>
+
+        <div class="section-block soft-block">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">Occasioni</span>
+              <h2>Appena pubblicati</h2>
+            </div>
+            <button class="text-btn" data-view="explore" type="button">Sfoglia</button>
+          </div>
+          <div id="latestGrid" class="book-grid"></div>
+        </div>
+
+        <div class="sell-banner">
+          <div class="sell-banner-icon" aria-hidden="true">＋</div>
+          <div>
+            <span class="eyebrow">Hai libri che non usi?</span>
+            <h2>Pubblica il tuo primo annuncio</h2>
+            <p>Inserisci l’ISBN: BookSale prova a compilare automaticamente i dati.</p>
+          </div>
+          <button class="primary-btn" data-action="open-sell" type="button">Vendi un libro</button>
+        </div>
+      </section>
+
+      <section id="exploreView" class="view">
+        <div class="page-heading">
+          <span class="eyebrow">Catalogo</span>
+          <h1>Trova il prossimo libro</h1>
+          <p>Filtra gli annunci per categoria, condizione e prezzo.</p>
+        </div>
+
+        <form id="exploreSearchForm" class="search-box standalone" role="search">
+          <span aria-hidden="true">⌕</span>
+          <input id="exploreSearchInput" type="search" placeholder="Cerca titolo, autore, ISBN…" autocomplete="off" aria-label="Cerca nel catalogo">
+          <button type="submit">Cerca</button>
+        </form>
+
+        <div class="filter-panel">
+          <label>
+            <span>Categoria</span>
+            <select id="categoryFilter">
+              <option value="">Tutte</option>
+            </select>
+          </label>
+          <label>
+            <span>Condizione</span>
+            <select id="conditionFilter">
+              <option value="">Tutte</option>
+              <option value="Come nuovo">Come nuovo</option>
+              <option value="Ottimo">Ottimo</option>
+              <option value="Buono">Buono</option>
+              <option value="Vissuto">Vissuto</option>
+            </select>
+          </label>
+          <label>
+            <span>Prezzo massimo</span>
+            <select id="priceFilter">
+              <option value="">Qualsiasi</option>
+              <option value="5">Fino a 5 €</option>
+              <option value="10">Fino a 10 €</option>
+              <option value="20">Fino a 20 €</option>
+              <option value="50">Fino a 50 €</option>
+            </select>
+          </label>
+          <label>
+            <span>Ordina</span>
+            <select id="sortFilter">
+              <option value="newest">Più recenti</option>
+              <option value="priceAsc">Prezzo crescente</option>
+              <option value="priceDesc">Prezzo decrescente</option>
+              <option value="title">Titolo A–Z</option>
+            </select>
+          </label>
+          <button id="resetFiltersBtn" class="secondary-btn compact" type="button">Azzera filtri</button>
+        </div>
+
+        <div class="results-bar">
+          <strong id="resultsCount">0 annunci</strong>
+          <button id="nearMeBtn" class="secondary-btn compact" type="button">⌖ Vicino a me</button>
+        </div>
+        <div id="exploreGrid" class="book-grid"></div>
+      </section>
+
+      <section id="favoritesView" class="view">
+        <div class="page-heading">
+          <span class="eyebrow">La tua selezione</span>
+          <h1>Preferiti</h1>
+          <p>Salva gli annunci interessanti per ritrovarli facilmente.</p>
+        </div>
+        <div id="favoritesGrid" class="book-grid"></div>
+      </section>
+
+      <section id="profileView" class="view">
+        <div class="profile-hero">
+          <div class="profile-avatar" id="profileAvatar">MN</div>
+          <div>
+            <span class="eyebrow">Il tuo spazio</span>
+            <h1 id="profileName">Marco</h1>
+            <p id="profileLocation">Cassino</p>
+          </div>
+          <button id="editProfileBtn" class="secondary-btn" type="button">Modifica profilo</button>
+        </div>
+
+        <div class="profile-stats">
+          <div><strong id="myListingsCount">0</strong><span>annunci</span></div>
+          <div><strong id="soldListingsCount">0</strong><span>venduti</span></div>
+          <div><strong id="favoriteCount">0</strong><span>preferiti</span></div>
+        </div>
+
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Gestione</span>
+            <h2>I miei annunci</h2>
+          </div>
+          <button class="primary-btn compact" data-action="open-sell" type="button">＋ Nuovo</button>
+        </div>
+        <div id="myListings" class="manage-list"></div>
+
+        <div class="data-tools">
+          <h2>Dati dell’app</h2>
+          <p>Esporta un backup degli annunci e del profilo oppure ripristinalo su un altro dispositivo.</p>
+          <div class="tool-actions">
+            <button id="exportBtn" class="secondary-btn" type="button">Esporta backup</button>
+            <label class="secondary-btn file-btn">
+              Importa backup
+              <input id="importInput" type="file" accept="application/json">
+            </label>
+            <button id="resetAppBtn" class="danger-btn" type="button">Ripristina demo</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navigazione principale">
+      <button class="nav-item active" data-view="home" type="button">
+        <span aria-hidden="true">⌂</span><small>Home</small>
+      </button>
+      <button class="nav-item" data-view="explore" type="button">
+        <span aria-hidden="true">⌕</span><small>Esplora</small>
+      </button>
+      <button class="nav-item sell-nav" data-action="open-sell" type="button" aria-label="Vendi un libro">
+        <span aria-hidden="true">＋</span><small>Vendi</small>
+      </button>
+      <button class="nav-item" data-view="favorites" type="button">
+        <span aria-hidden="true">♡</span><small>Preferiti</small>
+      </button>
+      <button class="nav-item" data-view="profile" type="button">
+        <span aria-hidden="true">○</span><small>Profilo</small>
+      </button>
+    </nav>
+  </div>
+
+  <dialog id="sellDialog" class="app-dialog">
+    <form id="listingForm" class="dialog-card">
+      <div class="dialog-header">
+        <div>
+          <span class="eyebrow">Nuovo annuncio</span>
+          <h2 id="listingDialogTitle">Vendi un libro</h2>
+        </div>
+        <button class="close-btn" data-close-dialog="sellDialog" type="button" aria-label="Chiudi">×</button>
+      </div>
+
+      <input id="listingId" type="hidden">
+
+      <div class="isbn-panel">
+        <label class="field grow">
+          <span>ISBN</span>
+          <input id="isbnInput" type="text" inputmode="numeric" placeholder="978…" maxlength="17">
+        </label>
+        <button id="lookupIsbnBtn" class="secondary-btn" type="button">Compila dati</button>
+        <button id="scanIsbnBtn" class="secondary-btn icon-only" type="button" title="Scansiona ISBN" aria-label="Scansiona ISBN">▣</button>
+      </div>
+      <p id="isbnMessage" class="field-note">L’ISBN si trova vicino al codice a barre sul retro del libro.</p>
+
+      <div class="form-grid two-cols">
+        <label class="field">
+          <span>Titolo *</span>
+          <input id="titleInput" type="text" required>
+        </label>
+        <label class="field">
+          <span>Autore *</span>
+          <input id="authorInput" type="text" required>
+        </label>
+        <label class="field">
+          <span>Categoria *</span>
+          <select id="categoryInput" required></select>
+        </label>
+        <label class="field">
+          <span>Condizione *</span>
+          <select id="conditionInput" required>
+            <option value="Come nuovo">Come nuovo</option>
+            <option value="Ottimo" selected>Ottimo</option>
+            <option value="Buono">Buono</option>
+            <option value="Vissuto">Vissuto</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Tipo annuncio *</span>
+          <select id="listingTypeInput" required>
+            <option value="Vendita">Vendita</option>
+            <option value="Scambio">Scambio</option>
+            <option value="Regalo">Regalo</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Prezzo (€)</span>
+          <input id="priceInput" type="number" min="0" step="0.50" value="5">
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Descrizione</span>
+        <textarea id="descriptionInput" rows="4" placeholder="Edizione, eventuali sottolineature, note sulla consegna…"></textarea>
+      </label>
+
+      <div class="form-grid two-cols">
+        <label class="field">
+          <span>Località *</span>
+          <input id="locationInput" type="text" required placeholder="Es. Cassino">
+        </label>
+        <label class="field">
+          <span>Modalità di consegna</span>
+          <select id="deliveryInput">
+            <option value="Consegna a mano">Consegna a mano</option>
+            <option value="Spedizione">Spedizione</option>
+            <option value="A mano o spedizione">A mano o spedizione</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="cover-editor">
+        <div id="coverPreview" class="cover-preview">
+          <span aria-hidden="true">📚</span>
+          <small>Nessuna copertina</small>
+        </div>
+        <div class="cover-controls">
+          <label class="field">
+            <span>URL copertina</span>
+            <input id="coverUrlInput" type="url" placeholder="https://…">
+          </label>
+          <label class="secondary-btn file-btn">
+            Carica una foto
+            <input id="coverFileInput" type="file" accept="image/*" capture="environment">
+          </label>
+          <button id="removeCoverBtn" class="text-btn danger-text" type="button">Rimuovi foto</button>
+        </div>
+      </div>
+
+      <label class="check-row">
+        <input id="exchangeInput" type="checkbox">
+        <span>Sono disponibile anche a valutare uno scambio.</span>
+      </label>
+
+      <div class="dialog-actions">
+        <button class="secondary-btn" data-close-dialog="sellDialog" type="button">Annulla</button>
+        <button class="primary-btn" type="submit">Pubblica annuncio</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="detailsDialog" class="app-dialog">
+    <div id="detailsContent" class="dialog-card details-card"></div>
+  </dialog>
+
+  <dialog id="profileDialog" class="app-dialog">
+    <form id="profileForm" class="dialog-card small-card">
+      <div class="dialog-header">
+        <div>
+          <span class="eyebrow">Profilo</span>
+          <h2>Modifica i tuoi dati</h2>
+        </div>
+        <button class="close-btn" data-close-dialog="profileDialog" type="button" aria-label="Chiudi">×</button>
+      </div>
+      <label class="field">
+        <span>Nome</span>
+        <input id="profileNameInput" type="text" required>
+      </label>
+      <label class="field">
+        <span>Località</span>
+        <input id="profileLocationInput" type="text" required>
+      </label>
+      <label class="field">
+        <span>Email di contatto</span>
+        <input id="profileEmailInput" type="email" placeholder="nome@email.it">
+      </label>
+      <label class="field">
+        <span>Telefono / WhatsApp</span>
+        <input id="profilePhoneInput" type="tel" placeholder="+39 …">
+      </label>
+      <button id="useLocationBtn" class="secondary-btn" type="button">⌖ Usa la posizione attuale</button>
+      <p id="profileGeoMessage" class="field-note"></p>
+      <div class="dialog-actions">
+        <button class="secondary-btn" data-close-dialog="profileDialog" type="button">Annulla</button>
+        <button class="primary-btn" type="submit">Salva profilo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="scannerDialog" class="app-dialog scanner-dialog">
+    <div class="dialog-card scanner-card">
+      <div class="dialog-header">
+        <div>
+          <span class="eyebrow">Fotocamera</span>
+          <h2>Scansiona il codice ISBN</h2>
+        </div>
+        <button class="close-btn" id="closeScannerBtn" type="button" aria-label="Chiudi">×</button>
+      </div>
+      <div class="camera-frame">
+        <video id="scannerVideo" playsinline muted></video>
+        <div class="scan-guide"></div>
+      </div>
+      <p id="scannerMessage" class="field-note">Inquadra il codice a barre sul retro del libro.</p>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <template id="emptyTemplate">
+    <div class="empty-state">
+      <div aria-hidden="true">📖</div>
+      <h3>Nessun libro trovato</h3>
+      <p>Prova a modificare la ricerca oppure pubblica un nuovo annuncio.</p>
+      <button class="primary-btn" data-action="open-sell" type="button">Pubblica un libro</button>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

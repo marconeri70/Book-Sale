@@ -1,0 +1,31 @@
+{
+  "name": "BookSale - Mercatino dei libri",
+  "short_name": "BookSale",
+  "description": "Compra, vendi e scambia libri usati vicino a te.",
+  "lang": "it-IT",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f8f4",
+  "theme_color": "#0f766e",
+  "categories": [
+    "books",
+    "shopping",
+    "social"
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
