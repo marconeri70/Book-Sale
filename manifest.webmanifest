@@ -1,7 +1,7 @@
 {
   "name": "BookSale - Mercatino dei libri",
   "short_name": "BookSale",
-  "description": "Compra, vendi e scambia libri usati vicino a te.",
+  "description": "Compra, vendi e scambia libri usati. Piani BookSale e annunci in evidenza.",
   "lang": "it-IT",
   "start_url": "./",
   "scope": "./",

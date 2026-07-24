@@ -131,6 +131,8 @@
     const timeout = setTimeout(() => controller.abort(), 18000);
     const headers = new Headers(options.headers || {});
     headers.set("X-Owner-Token", ownerToken);
+    const sessionToken = localStorage.getItem("booksale_session_v1") || "";
+    if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
     if (options.body && !(options.body instanceof Blob) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -263,10 +265,11 @@
       : `<div class="cover-fallback"><span>${escapeHtml(listing.title)}</span></div>`;
 
     return `
-      <article class="book-card ${listing.status === "sold" ? "sold" : ""}">
+      <article class="book-card ${listing.status === "sold" ? "sold" : ""} ${listing.featured ? "featured" : ""}">
         <div class="book-card-cover">
           ${cover}
-          <span class="card-badge">${listing.status === "sold" ? "Venduto" : escapeHtml(listing.type)}</span>
+          <span class="card-badge">${listing.moderationStatus === "pending" ? "In revisione" : listing.moderationStatus === "rejected" ? "Rifiutato" : listing.status === "sold" ? "Venduto" : escapeHtml(listing.type)}</span>
+          ${listing.featured ? `<span class="featured-badge">★ In evidenza</span>` : ""}
           ${distance !== null ? `<span class="card-distance">${distance < 1 ? "meno di 1 km" : `${Math.round(distance)} km`}</span>` : ""}
         </div>
         <button class="favorite-btn ${isFavorite ? "active" : ""}" type="button"
@@ -279,6 +282,7 @@
           <div class="card-meta">
             <span class="meta-pill">${escapeHtml(listing.condition)}</span>
             <span class="meta-pill">${escapeHtml(listing.category)}</span>
+            ${listing.sellerPlan === "pro" ? `<span class="meta-pill pro-pill">Venditore Pro</span>` : listing.sellerPlan === "plus" ? `<span class="meta-pill plus-pill">Venditore Plus</span>` : ""}
           </div>
           <div class="card-footer">
             <span class="location">⌖ ${escapeHtml(listing.location)}</span>
@@ -295,7 +299,10 @@
 
   function renderHome() {
     const available = listings.filter(item => item.status !== "sold");
-    const latest = [...available].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8);
+    const latest = [...available].sort((a, b) => {
+      if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }).slice(0, 8);
     $("#latestGrid").innerHTML = latest.length ? latest.map(bookCard).join("") : emptyState();
 
     $("#categoryRail").innerHTML = categories.slice(0, 8).map(([name, icon]) => {
@@ -338,7 +345,10 @@
     }
 
     const sorters = {
-      newest: (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+      newest: (a, b) => {
+        if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      },
       priceAsc: (a, b) => Number(a.price || 0) - Number(b.price || 0),
       priceDesc: (a, b) => Number(b.price || 0) - Number(a.price || 0),
       title: (a, b) => a.title.localeCompare(b.title, "it")
@@ -378,9 +388,13 @@
           </div>
           <div>
             <h3>${escapeHtml(item.title)}</h3>
-            <p>${formatPrice(item)} · ${item.status === "sold" ? "Venduto" : "Disponibile"} · ${formatDate(item.createdAt)}</p>
+            <p>${formatPrice(item)} · ${item.moderationStatus === "pending" ? "In revisione" : item.moderationStatus === "rejected" ? "Rifiutato" : item.status === "sold" ? "Venduto" : "Disponibile"} · ${formatDate(item.createdAt)}</p>
+            ${item.featured ? `<p class="promotion-note">★ In evidenza fino al ${formatDate(item.featuredUntil)}</p>` : ""}
+            ${item.viewCount !== undefined ? `<p class="listing-stats">${Number(item.viewCount || 0)} visualizzazioni · ${Number(item.contactCount || 0)} richieste contatto</p>` : ""}
+            ${item.moderationNote ? `<p class="moderation-note">${escapeHtml(item.moderationNote)}</p>` : ""}
           </div>
           <div class="manage-actions">
+            ${item.moderationStatus === "approved" && item.status === "available" ? `<button class="primary-btn compact" data-billing-action="promote" data-id="${item.id}" data-title="${escapeHtml(item.title)}" type="button">★ Evidenzia</button>` : ""}
             <button class="secondary-btn compact" data-action="edit" data-id="${item.id}" type="button">Modifica</button>
             <button class="secondary-btn compact" data-action="toggle-sold" data-id="${item.id}" type="button">${item.status === "sold" ? "Rimetti in vendita" : "Segna venduto"}</button>
             <button class="danger-btn compact" data-action="delete" data-id="${item.id}" type="button">Elimina</button>
@@ -426,6 +440,8 @@
             <span class="meta-pill">${escapeHtml(item.delivery)}</span>
             ${item.exchange ? `<span class="meta-pill">Valuta scambi</span>` : ""}
             ${item.isbn ? `<span class="meta-pill">ISBN ${escapeHtml(item.isbn)}</span>` : ""}
+            ${item.featured ? `<span class="meta-pill featured-pill">★ In evidenza</span>` : ""}
+            ${item.sellerPlan === "pro" ? `<span class="meta-pill pro-pill">Venditore Pro</span>` : item.sellerPlan === "plus" ? `<span class="meta-pill plus-pill">Venditore Plus</span>` : ""}
           </div>
           <div class="details-price">${formatPrice(item)}</div>
           <p class="details-description">${escapeHtml(item.description || "Nessuna descrizione aggiuntiva.")}</p>
@@ -439,17 +455,25 @@
           <div class="contact-actions">
             <button class="primary-btn" type="button" data-action="contact" data-kind="message" data-id="${item.id}">Scrivi al venditore</button>
             <button class="secondary-btn" type="button" data-action="contact" data-kind="share" data-id="${item.id}">Condividi</button>
+            <button class="secondary-btn danger-outline" type="button" data-security-action="report" data-id="${item.id}" data-title="${escapeHtml(item.title)}">Segnala</button>
           </div>
           <p class="field-note" style="margin-top:14px">Pubblicato il ${formatDate(item.createdAt)}. Non inviare denaro prima di aver verificato il libro e il venditore.</p>
           <span hidden data-email="${escapeHtml(sellerEmail || "")}" data-phone="${escapeHtml(sellerPhone || "")}"></span>
         </div>
       </div>`;
     $("#detailsDialog").showModal();
+    if (CLOUD_ENABLED && !item.owner && item.moderationStatus === "approved") {
+      apiFetch(`/api/listings/${encodeURIComponent(id)}/view`, { method: "POST" }).catch(() => {});
+    }
   }
 
   async function handleContact(id, kind) {
     const item = listings.find(listing => listing.id === id);
     if (!item) return;
+    if (CLOUD_ENABLED && !localStorage.getItem("booksale_session_v1") && kind !== "share") {
+      window.dispatchEvent(new CustomEvent("booksale:auth-required", { detail: { reason: "contact" } }));
+      return;
+    }
     const text = `Ciao, sono interessato al libro "${item.title}" pubblicato su BookSale.`;
 
     if (kind === "share") {
@@ -504,6 +528,10 @@
   }
 
   function openSell(id = "") {
+    if (CLOUD_ENABLED && !localStorage.getItem("booksale_session_v1")) {
+      window.dispatchEvent(new CustomEvent("booksale:auth-required", { detail: { reason: "sell" } }));
+      return;
+    }
     resetListingForm();
     if (id) {
       const item = listings.find(listing => listing.id === id && listing.owner);
@@ -665,7 +693,8 @@
         createdAt: existing?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         status: existing?.status || "available",
-        lat: profile.lat, lng: profile.lng
+        lat: profile.lat, lng: profile.lng,
+        turnstileToken: $("#listingTurnstileToken")?.value || ""
       };
 
       if (CLOUD_ENABLED) {
@@ -683,7 +712,12 @@
 
       $("#sellDialog").close();
       showView("profile");
-      showToast(id ? "Annuncio aggiornato" : "Annuncio pubblicato");
+      if (CLOUD_ENABLED) {
+        showToast(id ? "Modifica inviata alla moderazione" : "Annuncio inviato alla moderazione");
+        window.dispatchEvent(new CustomEvent("booksale:turnstile-reset", { detail: { target: "listing" } }));
+      } else {
+        showToast(id ? "Annuncio aggiornato" : "Annuncio pubblicato");
+      }
     } catch (error) {
       showToast(error.message || "Impossibile salvare l’annuncio");
     } finally {
@@ -1044,6 +1078,7 @@
     });
     $("#resetAppBtn").addEventListener("click", resetDemo);
     $("#refreshCloudBtn")?.addEventListener("click", () => loadRemoteListings(true));
+    window.addEventListener("booksale:refresh-cloud", () => loadRemoteListings(false));
 
     ["sellDialog", "detailsDialog", "profileDialog"].forEach(id => {
       const dialog = $(`#${id}`);

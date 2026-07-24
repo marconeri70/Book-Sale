@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <meta name="description" content="BookSale: compra, vendi e scambia libri vicino a te.">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.workers.dev https://openlibrary.org https://covers.openlibrary.org https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self';">
   <title>BookSale</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
@@ -27,6 +29,7 @@
           <i aria-hidden="true"></i><span>Cloud da configurare</span>
         </span>
         <button id="refreshCloudBtn" class="icon-btn" type="button" aria-label="Aggiorna annunci dal cloud" title="Aggiorna annunci">↻</button>
+        <button id="accountBtn" class="secondary-btn compact account-top-btn" type="button">Accedi</button>
         <button id="installBtn" class="icon-btn install-btn hidden" type="button" aria-label="Installa BookSale" title="Installa app">
           <span aria-hidden="true">↓</span>
         </button>
@@ -170,6 +173,38 @@
           <button id="editProfileBtn" class="secondary-btn" type="button">Modifica profilo</button>
         </div>
 
+        <div id="accountPanel" class="account-panel">
+          <div>
+            <span class="eyebrow">Account BookSale</span>
+            <h2 id="accountPanelTitle">Accedi o registrati</h2>
+            <p id="accountPanelText">Per pubblicare annunci e contattare i venditori è necessario un account.</p>
+          </div>
+          <div class="account-panel-actions">
+            <button id="profileLoginBtn" class="primary-btn" type="button">Accedi / Registrati</button>
+            <button id="openPlansBtn" class="secondary-btn" type="button">Piani e pagamenti</button>
+            <button id="adminOpenBtn" class="secondary-btn hidden" type="button">Moderazione</button>
+            <button id="logoutBtn" class="danger-btn hidden" type="button">Esci</button>
+          </div>
+        </div>
+
+        <section id="billingPanel" class="billing-panel">
+          <div class="billing-panel-copy">
+            <span class="eyebrow">Piano e visibilità</span>
+            <h2 id="billingPlanName">Piano gratuito</h2>
+            <p id="billingPlanText">Accedi per gestire abbonamenti, pagamenti e annunci in evidenza.</p>
+            <div class="billing-meta">
+              <span id="billingPlanStatus" class="meta-pill">Non connesso</span>
+              <span id="billingListingLimit" class="meta-pill">5 annunci attivi</span>
+              <span id="billingRenewal" class="meta-pill hidden"></span>
+            </div>
+          </div>
+          <div class="billing-panel-actions">
+            <button id="billingChoosePlanBtn" class="primary-btn" type="button">Scopri i piani</button>
+            <button id="manageBillingBtn" class="secondary-btn hidden" type="button">Gestisci abbonamento</button>
+          </div>
+          <div id="billingHistory" class="billing-history"></div>
+        </section>
+
         <div class="profile-stats">
           <div><strong id="myListingsCount">0</strong><span>annunci</span></div>
           <div><strong id="soldListingsCount">0</strong><span>venduti</span></div>
@@ -217,6 +252,14 @@
         <span aria-hidden="true">○</span><small>Profilo</small>
       </button>
     </nav>
+
+    <footer class="site-footer">
+      <span>© 2026 BookSale</span>
+      <button data-legal="privacy" type="button">Privacy</button>
+      <button data-billing-open type="button">Piani</button>
+      <button data-legal="terms" type="button">Condizioni d’uso</button>
+      <a class="legal-email" href="#">Contatti</a>
+    </footer>
   </div>
 
   <dialog id="sellDialog" class="app-dialog">
@@ -320,6 +363,13 @@
         <span>Sono disponibile anche a valutare uno scambio.</span>
       </label>
 
+      <div class="security-check">
+        <strong>Verifica antispam</strong>
+        <div id="listingTurnstile"></div>
+        <input id="listingTurnstileToken" type="hidden">
+        <p class="field-note">La verifica è richiesta prima di inviare o modificare un annuncio.</p>
+      </div>
+
       <div class="dialog-actions">
         <button class="secondary-btn" data-close-dialog="sellDialog" type="button">Annulla</button>
         <button class="primary-btn" type="submit">Pubblica annuncio</button>
@@ -382,6 +432,122 @@
     </div>
   </dialog>
 
+
+  <dialog id="authDialog" class="app-dialog">
+    <div class="dialog-card small-card">
+      <div class="dialog-header">
+        <div><span class="eyebrow">Account</span><h2>Accedi a BookSale</h2></div>
+        <button class="close-btn" data-close-dialog="authDialog" type="button" aria-label="Chiudi">×</button>
+      </div>
+      <div class="auth-tabs">
+        <button id="loginTabBtn" class="auth-tab active" type="button">Accedi</button>
+        <button id="registerTabBtn" class="auth-tab" type="button">Registrati</button>
+      </div>
+      <form id="loginForm" class="auth-form">
+        <label class="field"><span>Email</span><input id="loginEmail" type="email" autocomplete="email" required></label>
+        <label class="field"><span>Password</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <div id="loginTurnstile"></div><input id="loginTurnstileToken" type="hidden">
+        <button class="primary-btn full-btn" type="submit">Accedi</button>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <div class="form-grid two-cols">
+          <label class="field"><span>Nome *</span><input id="registerName" type="text" autocomplete="name" required maxlength="100"></label>
+          <label class="field"><span>Località</span><input id="registerLocation" type="text" autocomplete="address-level2" maxlength="180"></label>
+          <label class="field"><span>Email *</span><input id="registerEmail" type="email" autocomplete="email" required maxlength="180"></label>
+          <label class="field"><span>Telefono / WhatsApp</span><input id="registerPhone" type="tel" autocomplete="tel" maxlength="40"></label>
+        </div>
+        <label class="field"><span>Password *</span><input id="registerPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+        <p class="field-note">Minimo 10 caratteri, almeno una lettera e un numero.</p>
+        <label class="check-row"><input id="registerTerms" type="checkbox" required><span>Ho letto e accetto le <button class="inline-link" data-legal="terms" type="button">Condizioni d’uso</button> e l’<button class="inline-link" data-legal="privacy" type="button">Informativa privacy</button>.</span></label>
+        <div id="registerTurnstile"></div><input id="registerTurnstileToken" type="hidden">
+        <button class="primary-btn full-btn" type="submit">Crea account</button>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="reportDialog" class="app-dialog">
+    <form id="reportForm" class="dialog-card small-card">
+      <div class="dialog-header"><div><span class="eyebrow">Sicurezza</span><h2>Segnala annuncio</h2></div><button class="close-btn" data-close-dialog="reportDialog" type="button">×</button></div>
+      <input id="reportListingId" type="hidden">
+      <p id="reportListingTitle" class="field-note"></p>
+      <label class="field"><span>Motivo *</span><select id="reportReason" required><option value="">Seleziona</option><option>Truffa o richiesta di pagamento sospetta</option><option>Contenuto illegale o vietato</option><option>Libro contraffatto o non conforme</option><option>Offese, molestie o dati personali</option><option>Spam o annuncio duplicato</option><option>Altro</option></select></label>
+      <label class="field"><span>Descrizione precisa *</span><textarea id="reportDetails" rows="5" required maxlength="2000" placeholder="Spiega cosa hai riscontrato e dove compare nell’annuncio."></textarea></label>
+      <label class="field"><span>Email per eventuali comunicazioni *</span><input id="reportEmail" type="email" required maxlength="180"></label>
+      <label class="check-row"><input id="reportGoodFaith" type="checkbox" required><span>Confermo che la segnalazione è inviata in buona fede e contiene informazioni accurate.</span></label>
+      <div id="reportTurnstile"></div><input id="reportTurnstileToken" type="hidden">
+      <div class="dialog-actions"><button class="secondary-btn" data-close-dialog="reportDialog" type="button">Annulla</button><button class="danger-btn" type="submit">Invia segnalazione</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="adminDialog" class="app-dialog admin-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header"><div><span class="eyebrow">Amministrazione</span><h2>Moderazione BookSale</h2></div><button class="close-btn" data-close-dialog="adminDialog" type="button">×</button></div>
+      <button id="refreshAdminBtn" class="secondary-btn compact" type="button">Aggiorna coda</button>
+      <div class="admin-columns">
+        <section><h3>Annunci da approvare</h3><div id="pendingListingsAdmin" class="admin-list"></div></section>
+        <section><h3>Segnalazioni aperte</h3><div id="reportsAdmin" class="admin-list"></div></section>
+        <section><h3>Pagamenti recenti</h3><div id="paymentsAdmin" class="admin-list"></div></section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pricingDialog" class="app-dialog pricing-dialog">
+    <div class="dialog-card">
+      <div class="dialog-header">
+        <div><span class="eyebrow">Servizi BookSale</span><h2>Piani e annunci in evidenza</h2></div>
+        <button class="close-btn" data-close-dialog="pricingDialog" type="button">×</button>
+      </div>
+      <p class="pricing-intro">Il pagamento riguarda soltanto servizi di visibilità e abbonamenti BookSale. La compravendita dei libri resta un accordo diretto tra gli utenti.</p>
+      <div id="pricingCards" class="pricing-grid"><p>Caricamento prezzi…</p></div>
+      <p id="pricingModeNote" class="field-note"></p>
+    </div>
+  </dialog>
+
+  <dialog id="promotionDialog" class="app-dialog">
+    <div class="dialog-card small-card">
+      <div class="dialog-header">
+        <div><span class="eyebrow">Più visibilità</span><h2>Metti in evidenza</h2></div>
+        <button class="close-btn" data-close-dialog="promotionDialog" type="button">×</button>
+      </div>
+      <input id="promotionListingId" type="hidden">
+      <p id="promotionListingTitle" class="field-note"></p>
+      <div id="promotionOptions" class="promotion-options"></div>
+      <p class="field-note">L’evidenza parte quando Stripe conferma il pagamento. Se l’annuncio è già in evidenza, i nuovi giorni si aggiungono alla scadenza.</p>
+    </div>
+  </dialog>
+
+  <dialog id="privacyDialog" class="app-dialog legal-dialog">
+    <article class="dialog-card legal-copy">
+      <div class="dialog-header"><div><span class="eyebrow">Trasparenza</span><h2>Informativa privacy</h2></div><button class="close-btn" data-close-dialog="privacyDialog" type="button">×</button></div>
+      <p><strong>Ultimo aggiornamento: 23 luglio 2026.</strong> Questa informativa descrive il trattamento dei dati personali degli utenti di BookSale.</p>
+      <h3>Titolare e contatti</h3><p>Il titolare del servizio BookSale è il gestore indicato nel sito. Contatto privacy: <a class="legal-email" href="#">da configurare</a>.</p>
+      <h3>Dati trattati</h3><p>Dati di registrazione e contatto, dati degli annunci, fotografie, località indicativa, segnalazioni, dati tecnici e di sicurezza. Le coordinate GPS sono facoltative e vengono usate per mostrare la distanza approssimativa.</p>
+      <h3>Finalità e basi giuridiche</h3><p>I dati sono trattati per creare e gestire l’account, pubblicare e moderare annunci, consentire il contatto tra utenti, prevenire abusi, gestire segnalazioni e adempiere a obblighi di legge. Le basi giuridiche possono comprendere esecuzione del servizio richiesto, consenso per funzioni facoltative, obblighi legali e legittimo interesse alla sicurezza.</p>
+      <h3>Destinatari e servizi esterni</h3><p>I dati tecnici e i contenuti sono ospitati tramite Cloudflare Workers, Pages, D1, R2 e Turnstile. Open Library può essere contattata quando l’utente ricerca un ISBN. Stripe tratta i dati necessari a gestire pagamenti, abbonamenti, fatturazione e prevenzione delle frodi secondo la propria informativa. I recapiti del venditore sono comunicati soltanto a utenti autenticati che chiedono di contattarlo.</p>
+      <h3>Conservazione</h3><p>Account e annunci sono conservati finché necessari al servizio o finché non ne viene richiesta la cancellazione, salvo obblighi di legge e necessità di sicurezza. Le sessioni scadono automaticamente; segnalazioni e log di moderazione possono essere conservati più a lungo per prevenire abusi e documentare le decisioni.</p>
+      <h3>Diritti</h3><p>L’interessato può chiedere accesso, rettifica, cancellazione, limitazione, opposizione e portabilità quando applicabili, oltre a proporre reclamo al Garante per la protezione dei dati personali.</p>
+      <h3>Memoria locale</h3><p>BookSale usa localStorage e cache tecnica per sessione, preferiti, profilo e funzionamento PWA. Stripe può utilizzare tecnologie strettamente necessarie alla sicurezza e all’esecuzione dei pagamenti nella propria pagina Checkout e nel portale di fatturazione.</p>
+      <p class="legal-warning">Prima dell’apertura ufficiale sostituisci l’email di contatto e fai verificare il testo da un professionista in base al soggetto che gestirà realmente il servizio.</p>
+    </article>
+  </dialog>
+
+  <dialog id="termsDialog" class="app-dialog legal-dialog">
+    <article class="dialog-card legal-copy">
+      <div class="dialog-header"><div><span class="eyebrow">Regole</span><h2>Condizioni d’uso</h2></div><button class="close-btn" data-close-dialog="termsDialog" type="button">×</button></div>
+      <p><strong>Ultimo aggiornamento: 23 luglio 2026.</strong> BookSale mette in contatto utenti interessati a vendere, scambiare o regalare libri. Il pagamento dei libri, la consegna e le relative garanzie restano accordi diretti tra gli utenti. BookSale può invece vendere servizi propri, come annunci in evidenza e abbonamenti.</p>
+      <h3>Account</h3><p>L’utente deve fornire dati veritieri, proteggere la password e usare il servizio nel rispetto della legge. Gli utenti minorenni devono utilizzare il servizio con l’autorizzazione e la supervisione di un adulto responsabile.</p>
+      <h3>Annunci consentiti</h3><p>Sono ammessi esclusivamente libri e materiali editoriali leciti. Sono vietati contenuti contraffatti, rubati, offensivi, discriminatori, ingannevoli, pornografici illegali, lesivi della privacy o dei diritti di terzi, nonché richieste di pagamento fraudolente.</p>
+      <h3>Moderazione</h3><p>Gli annunci nuovi o modificati possono restare in attesa di approvazione. BookSale può rifiutare, nascondere o rimuovere contenuti e sospendere account in caso di violazioni, rischi per gli utenti o obblighi di legge.</p>
+      <h3>Segnalazioni</h3><p>Chiunque può segnalare un annuncio indicando il contenuto contestato, il motivo e informazioni sufficienti per valutarlo. Le segnalazioni manifestamente infondate o abusive possono essere limitate.</p>
+      <h3>Transazioni e sicurezza</h3><p>Gli accordi per i libri avvengono direttamente tra utenti. Prima di pagare o consegnare un libro verifica identità, condizioni del bene e modalità di scambio. Non inviare codici, password o documenti non necessari.</p>
+      <h3>Servizi a pagamento BookSale</h3><p>Annunci in evidenza e abbonamenti sono acquistati tramite Stripe. Il prezzo, la durata e l’eventuale rinnovo vengono mostrati prima del pagamento. Gli abbonamenti si rinnovano automaticamente finché non vengono annullati dal portale di fatturazione. L’annullamento impedisce i rinnovi successivi ma non comporta automaticamente il rimborso del periodo già pagato.</p>
+      <h3>Rimborsi</h3><p>Le richieste relative a servizi BookSale devono essere inviate al contatto indicato nel sito. Eventuali diritti inderogabili del consumatore restano applicabili. L’evidenza già attivata e utilizzata può non essere rimborsabile nei limiti consentiti dalla legge.</p>
+      <h3>Responsabilità</h3><p>BookSale fornisce uno spazio di incontro e non garantisce identità, qualità, disponibilità o comportamento degli utenti. Resta ferma la responsabilità del gestore nei limiti inderogabili previsti dalla legge.</p>
+      <h3>Contatti</h3><p>Per assistenza, contestazioni o richieste legali: <a class="legal-email" href="#">da configurare</a>.</p>
+      <p class="legal-warning">Questo testo è un modello operativo e deve essere adattato al titolare reale, alle modalità di gestione e ai servizi a pagamento, alla fiscalità e alle regole di recesso applicabili.</p>
+    </article>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <template id="emptyTemplate">
@@ -393,7 +559,10 @@
     </div>
   </template>
 
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script src="security.js"></script>
+  <script src="billing.js"></script>
 </body>
 </html>
