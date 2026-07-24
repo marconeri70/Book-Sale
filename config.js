@@ -5,7 +5,7 @@ window.BOOKSALE_CONFIG = {
   TURNSTILE_SITE_KEY: "0x4AAAAAAD7JzaUSfwLPH4S2",
 
   // Indirizzo mostrato nelle pagine Privacy e Condizioni d'uso.
-  LEGAL_CONTACT_EMAIL: "marconeri70@gmail.com",
+  LEGAL_CONTACT_EMAIL: "INSERISCI_EMAIL_CONTATTO",
 
   SITE_NAME: "BookSale",
 
