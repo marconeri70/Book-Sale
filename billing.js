@@ -158,8 +158,12 @@
     const label = active && user.planCode === "pro" ? "BookSale Professionale"
       : active && user.planCode === "plus" ? "BookSale Plus" : "Piano gratuito";
     $("#billingPlanName").textContent = label;
+    const cancellationScheduled = Boolean(data.subscription?.cancel_at_period_end);
+    const periodEnd = data.subscription?.current_period_end;
     $("#billingPlanText").textContent = active
-      ? "Il tuo piano è attivo. Puoi gestire rinnovo, metodo di pagamento e cancellazione nel portale Stripe."
+      ? cancellationScheduled && periodEnd
+        ? `Il piano resta attivo fino al ${formatDate(periodEnd)}. Il rinnovo automatico è stato annullato.`
+        : "Il tuo piano è attivo. Puoi gestire rinnovo, metodo di pagamento e cancellazione nel portale Stripe."
       : "Puoi acquistare visibilità per un singolo annuncio oppure attivare un abbonamento.";
     $("#billingPlanStatus").textContent = active ? `Stato: ${user.planStatus}` : "Nessun abbonamento attivo";
     $("#billingListingLimit").textContent = `${data.listingLimit || 5} annunci attivi`;
